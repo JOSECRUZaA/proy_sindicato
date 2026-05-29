@@ -1,0 +1,171 @@
+import React, { useState, useEffect } from 'react';
+import { Users, CarFront, AlertCircle, TrendingUp, Plus } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { Link } from 'react-router-dom';
+
+const Dashboard = () => {
+  const [stats, setStats] = useState({
+    totalAfiliados: 0,
+    vehiculosActivos: 0,
+    cuotasPendientes: 0,
+    recaudacionMes: 0
+  });
+  const [recentAfiliados, setRecentAfiliados] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    try {
+      // 1. Total Afiliados
+      const { count: countAfiliados } = await supabase
+        .from('afiliados')
+        .select('*', { count: 'exact', head: true });
+        
+      // 2. Vehículos Activos
+      const { count: countVehiculos } = await supabase
+        .from('vehiculos')
+        .select('*', { count: 'exact', head: true })
+        .eq('estado', 'Operativo');
+        
+      // 3. Cuotas Pendientes
+      const { count: countCuotas } = await supabase
+        .from('cuotas')
+        .select('*', { count: 'exact', head: true })
+        .eq('estado', 'Pendiente');
+        
+      // 4. Recaudación Mensual (Cancelado este mes)
+      const date = new Date();
+      const currentMonth = date.getMonth() + 1;
+      const currentYear = date.getFullYear();
+      
+      const { data: pagos } = await supabase
+        .from('cuotas')
+        .select('monto_bs')
+        .eq('estado', 'Cancelado')
+        .eq('mes', currentMonth)
+        .eq('gestion', currentYear);
+        
+      const recaudacion = pagos ? pagos.reduce((sum, pago) => sum + parseFloat(pago.monto_bs), 0) : 0;
+      
+      setStats({
+        totalAfiliados: countAfiliados || 0,
+        vehiculosActivos: countVehiculos || 0,
+        cuotasPendientes: countCuotas || 0,
+        recaudacionMes: recaudacion
+      });
+
+      // 5. Últimos 5 afiliados registrados
+      const { data: recientes } = await supabase
+        .from('afiliados')
+        .select(`
+          id_afiliado, numero_afiliado, tipo_afiliado, estado,
+          personas ( nombres, paterno, ci )
+        `)
+        .order('id_afiliado', { ascending: false })
+        .limit(5);
+        
+      setRecentAfiliados(recientes || []);
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="animate-fade">
+      <h1 className="page-title">Panel General</h1>
+      <p className="page-subtitle" style={{ marginBottom: '2rem' }}>Resumen estadístico del sindicato</p>
+
+      <div className="dashboard-grid">
+        <div className="stat-card animate-fade-in delay-1">
+          <div className="stat-icon">
+            <Users size={28} />
+          </div>
+          <div className="stat-info">
+            <h3>Total Afiliados</h3>
+            <div className="value">{loading ? '...' : stats.totalAfiliados}</div>
+          </div>
+        </div>
+
+        <div className="stat-card animate-fade-in delay-2">
+          <div className="stat-icon" style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>
+            <CarFront size={28} />
+          </div>
+          <div className="stat-info">
+            <h3>Vehículos Activos</h3>
+            <div className="value">{loading ? '...' : stats.vehiculosActivos}</div>
+          </div>
+        </div>
+
+        <div className="stat-card animate-fade-in delay-3">
+          <div className="stat-icon" style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b' }}>
+            <AlertCircle size={28} />
+          </div>
+          <div className="stat-info">
+            <h3>Cuotas Pendientes</h3>
+            <div className="value">{loading ? '...' : stats.cuotasPendientes}</div>
+          </div>
+        </div>
+
+        <div className="stat-card animate-fade-in delay-3">
+          <div className="stat-icon" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>
+            <TrendingUp size={28} />
+          </div>
+          <div className="stat-info">
+            <h3>Recaudación Mensual</h3>
+            <div className="value">{loading ? '...' : `Bs. ${stats.recaudacionMes.toLocaleString()}`}</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="table-container animate-fade-in delay-3">
+        <div className="table-header">
+          <h2 className="table-title">Últimos Afiliados Registrados</h2>
+          <Link to="/dashboard/afiliados" className="btn" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Plus size={18} />
+            <span>Ir a Módulo de Afiliados</span>
+          </Link>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>ID / Padrón</th>
+              <th>Nombre Completo</th>
+              <th>C.I.</th>
+              <th>Tipo de Socio</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan="5" style={{ textAlign: 'center', padding: '2rem' }}>Cargando datos recientes...</td></tr>
+            ) : recentAfiliados.length === 0 ? (
+              <tr><td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No hay afiliados registrados en el sistema.</td></tr>
+            ) : (
+              recentAfiliados.map(af => (
+                <tr key={af.id_afiliado}>
+                  <td style={{ fontWeight: '500' }}>{af.numero_afiliado || `AF-${af.id_afiliado.toString().padStart(4, '0')}`}</td>
+                  <td>{af.personas?.nombres} {af.personas?.paterno}</td>
+                  <td>{af.personas?.ci}</td>
+                  <td>{af.tipo_afiliado}</td>
+                  <td>
+                    <span className={`badge ${af.estado === 'Activo' ? 'badge-success' : af.estado === 'Suspendido' ? 'badge-warning' : 'badge-danger'}`}>
+                      {af.estado || 'Activo'}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+export default Dashboard;
