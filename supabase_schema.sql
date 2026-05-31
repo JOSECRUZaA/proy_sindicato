@@ -288,3 +288,26 @@ INSERT INTO tipos_multa (concepto, monto_default, categoria) VALUES
     ('Falta a fiesta patronal (Preste)', 300.00, 'Social'),
     ('Peleas o altercados entre choferes', 150.00, 'Disciplina'),
     ('No portar uniforme / Distintivo', 20.00, 'Disciplina');
+
+-- ==============================================================================
+-- VISTAS OPTIMIZADAS
+-- ==============================================================================
+
+-- Vista para búsqueda unificada ultrarrápida de vehículos (Disco, Placa, Dueño, Chofer)
+CREATE OR REPLACE VIEW vista_busqueda_vehiculos AS
+SELECT 
+    v.id_vehiculo,
+    CONCAT_WS(' ', 
+        v.numero_disco::text, 
+        v.placa, 
+        ap.numero_afiliado, 
+        pp.nombres, pp.paterno, pp.ci,
+        ac.numero_afiliado,
+        pc.nombres, pc.paterno, pc.ci
+    ) AS busqueda_texto
+FROM vehiculos v
+JOIN afiliados ap ON v.id_propietario = ap.id_afiliado
+JOIN personas pp ON ap.id_persona = pp.id_persona
+LEFT JOIN chofer_vehiculo cv ON v.id_vehiculo = cv.id_vehiculo AND cv.estado = 1 AND cv.fecha_fin IS NULL
+LEFT JOIN afiliados ac ON cv.id_chofer = ac.id_afiliado
+LEFT JOIN personas pc ON ac.id_persona = pc.id_persona;

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CarFront, KeyRound, Mail, ArrowLeft, AlertCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
   const navigate = useNavigate();
@@ -9,8 +10,23 @@ const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
+  const { user, profile } = useAuth();
 
   const isEnvConfigured = true; // Respaldo inyectado de forma segura en supabase.js
+
+  // Redirigir al dashboard específico una vez que se cargue el usuario Y su perfil
+  React.useEffect(() => {
+    if (user && profile) {
+      const userRol = profile.rol || '';
+      if (userRol === 'Controlador') {
+        navigate('/dashboard/controlador', { replace: true });
+      } else if (userRol === 'Afiliado' || userRol === 'Consulta') {
+        navigate('/dashboard/mi-panel', { replace: true });
+      } else {
+        navigate('/dashboard', { replace: true });
+      }
+    }
+  }, [user, profile, navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -22,18 +38,25 @@ const Login = () => {
     setError(null);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      // Timeout promise for Supabase login (just in case network drops or hangs)
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Tiempo de espera agotado. Verifique su conexión.')), 15000)
+      );
+
+      const loginPromise = supabase.auth.signInWithPassword({
         email: email,
         password: password,
       });
 
+      const { data, error } = await Promise.race([loginPromise, timeoutPromise]);
+
       if (error) throw error;
       
-      // Si el login es exitoso, ir al dashboard
-      if (data.user) {
-        navigate('/dashboard');
-      }
+      // No navegamos aquí manualmente.
+      // El useEffect de arriba detectará que 'user' y 'profile' ya están listos
+      // y hará la redirección limpia hacia la ruta exacta sin parpadeos.
     } catch (err) {
+      console.error('Error de login:', err);
       setError(err.message === 'Invalid login credentials' 
         ? 'Credenciales incorrectas. Intente nuevamente.' 
         : err.message);
