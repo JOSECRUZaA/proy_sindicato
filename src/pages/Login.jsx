@@ -10,8 +10,14 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
 
+  const isEnvConfigured = !!import.meta.env.VITE_SUPABASE_URL && !!import.meta.env.VITE_SUPABASE_ANON_KEY;
+
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (!isEnvConfigured) {
+      alert("No se puede iniciar sesión: Las variables de entorno de Supabase no están configuradas en el servidor.");
+      return;
+    }
     setLoading(true);
     setError(null);
 
@@ -37,6 +43,7 @@ const Login = () => {
   };
 
   const handleRegister = async () => {
+    if (!isEnvConfigured) return;
     setLoading(true);
     setError(null);
     try {
@@ -72,6 +79,18 @@ const Login = () => {
             <h2>Bienvenido de Nuevo</h2>
             <p style={{ color: 'var(--text-muted)' }}>Ingresa a tu cuenta institucional</p>
           </div>
+
+          {!isEnvConfigured && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', color: '#b45309', padding: '1rem', borderRadius: '12px', marginBottom: '1.5rem', fontSize: '0.85rem', lineHeight: '1.5', textAlign: 'left' }}>
+              <strong>⚠️ Variables de Entorno Faltantes en Vercel:</strong><br />
+              No se han detectado las credenciales de Supabase en este despliegue. Por favor ve a tu consola de <strong>Vercel -> Settings -> Environment Variables</strong> y agrega:
+              <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.2rem' }}>
+                <li><code>VITE_SUPABASE_URL</code></li>
+                <li><code>VITE_SUPABASE_ANON_KEY</code></li>
+              </ul>
+              Luego, realiza un **Redeploy** de la aplicación.
+            </div>
+          )}
 
           {error && (
             <div style={{ background: '#fef2f2', color: '#ef4444', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
