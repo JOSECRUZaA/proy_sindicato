@@ -62,7 +62,7 @@ const Dashboard = () => {
       const { data: recientes } = await supabase
         .from('afiliados')
         .select(`
-          id_afiliado, numero_afiliado, tipo_afiliado, estado,
+          id_afiliado, numero_afiliado, tipo_afiliado, estado_organico,
           personas ( nombres, paterno, ci )
         `)
         .order('id_afiliado', { ascending: false })
@@ -154,8 +154,8 @@ const Dashboard = () => {
                   <td>{af.personas?.ci}</td>
                   <td>{af.tipo_afiliado}</td>
                   <td>
-                    <span className={`badge ${af.estado === 'Activo' ? 'badge-success' : af.estado === 'Suspendido' ? 'badge-warning' : 'badge-danger'}`}>
-                      {af.estado || 'Activo'}
+                    <span className={`badge ${af.estado_organico === 'Activo' ? 'badge-success' : af.estado_organico === 'Suspendido' ? 'badge-warning' : 'badge-danger'}`}>
+                      {af.estado_organico || 'Activo'}
                     </span>
                   </td>
                 </tr>

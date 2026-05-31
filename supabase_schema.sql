@@ -114,7 +114,7 @@ CREATE TABLE vehiculos (
     color           VARCHAR(30),
     fotografia      VARCHAR(255),
     estado          VARCHAR(20) DEFAULT 'Operativo'
-                    CHECK (estado IN ('Operativo','Suspendido','Baja'))
+                    CHECK (estado IN ('Operativo', 'Restricción Vehicular', 'Restricción Sindical', 'Mantenimiento', 'Fuerza Mayor', 'Baja'))
 );
 
 CREATE TABLE chofer_vehiculo (
@@ -128,7 +128,7 @@ CREATE TABLE chofer_vehiculo (
 );
 
 -- ==============================================================================
--- MÓDULO 4: RUTAS Y OPERACIONES
+-- MÓDULO 4: RUTAS Y OPERACIONES (RUTAS FIJAS)
 -- ==============================================================================
 
 CREATE TABLE rutas (
@@ -138,32 +138,6 @@ CREATE TABLE rutas (
     origen          VARCHAR(100) NOT NULL,
     destino         VARCHAR(100) NOT NULL,
     estado          SMALLINT DEFAULT 1 CHECK (estado IN (0,1))
-);
-
-CREATE TABLE sorteos_diarios (
-    id_sorteo           SERIAL PRIMARY KEY,
-    fecha_sorteo        DATE DEFAULT CURRENT_DATE,
-    hora_sorteo         TIME,
-    id_ruta             INT NOT NULL REFERENCES rutas(id_ruta),
-    id_usuario_admin    INT REFERENCES usuarios(id_usuario),
-    observacion         VARCHAR(255),
-    estado              SMALLINT DEFAULT 1 CHECK (estado IN (0,1))
-);
-
-CREATE TABLE salidas (
-    id_salida           SERIAL PRIMARY KEY,
-    id_sorteo           INT REFERENCES sorteos_diarios(id_sorteo),
-    id_vehiculo         INT NOT NULL REFERENCES vehiculos(id_vehiculo),
-    id_chofer           INT NOT NULL REFERENCES afiliados(id_afiliado),
-    posicion_sorteo     INT,
-    fecha_salida        DATE NOT NULL,
-    hora_salida         TIME,
-    fecha_retorno       DATE,
-    hora_retorno        TIME,
-    id_usuario_registro INT REFERENCES usuarios(id_usuario),
-    observacion         VARCHAR(255),
-    estado              VARCHAR(20) DEFAULT 'Programada'
-                        CHECK (estado IN ('Programada','En Ruta','Completada','Anulada'))
 );
 
 -- ==============================================================================
@@ -219,11 +193,19 @@ CREATE TABLE cuotas (
     CONSTRAINT uq_cuota_periodo UNIQUE (id_afiliado, id_tipo_cuota, gestion, mes)
 );
 
+CREATE TABLE tipos_multa (
+    id_tipo_multa   SERIAL PRIMARY KEY,
+    concepto        VARCHAR(150) UNIQUE NOT NULL,
+    monto_default   DECIMAL(8,2) NOT NULL,
+    categoria       VARCHAR(50) NOT NULL
+);
+
 CREATE TABLE multas (
     id_multa        SERIAL PRIMARY KEY,
     id_afiliado     INT NOT NULL REFERENCES afiliados(id_afiliado),
     id_usuario_emisor INT NOT NULL REFERENCES usuarios(id_usuario),
     id_asamblea     INT REFERENCES asambleas(id_asamblea),
+    id_tipo_multa   INT REFERENCES tipos_multa(id_tipo_multa) ON DELETE SET NULL,
     concepto        VARCHAR(255) NOT NULL,
     monto_bs        DECIMAL(8,2) NOT NULL,
     fecha_emision   DATE DEFAULT CURRENT_DATE,
@@ -260,9 +242,11 @@ ALTER TABLE vehiculos ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Lectura de roles para todos" 
 ON roles FOR SELECT TO authenticated USING (true);
 
--- Aquí validamos comparando el auth_user_id de nuestra tabla con el uid() de Supabase
-CREATE POLICY "Lectura del propio perfil" 
-ON usuarios FOR SELECT TO authenticated USING (auth.uid() = auth_user_id);
+-- Permitir a usuarios autenticados gestionar usuarios, personas, afiliados y vehículos
+CREATE POLICY "Permisos totales de usuarios para autenticados" ON usuarios FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Permisos totales de personas para autenticados" ON personas FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Permisos totales de afiliados para autenticados" ON afiliados FOR ALL TO authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Permisos totales de vehiculos para autenticados" ON vehiculos FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- ==============================================================================
 -- INSERTS INICIALES (DATOS SEMILLA)
@@ -272,7 +256,8 @@ INSERT INTO roles (nombre, descripcion) VALUES
     ('Administrador',   'Acceso total al sistema'),
     ('Secretario',      'Gestión de afiliados y asambleas'),
     ('Tesorero',        'Gestión de cuotas y multas'),
-    ('Consulta',        'Solo lectura del padrón');
+    ('Consulta',        'Solo lectura del padrón'),
+    ('Controlador',     'Registro de multas y control en parada o ruta');
 
 INSERT INTO cargos_directiva (nombre_cargo, orden_jerarquico) VALUES
     ('Secretario General',         1),
@@ -294,3 +279,12 @@ INSERT INTO categorias_licencia (categoria, descripcion) VALUES
     ('C',   'Vehículo pesado'),
     ('D',   'Transporte de pasajeros'),
     ('P',   'Transporte público urbano');
+
+INSERT INTO tipos_multa (concepto, monto_default, categoria) VALUES
+    ('Falta a marchas o bloqueos', 200.00, 'Movilizaciones'),
+    ('Inasistencia a asambleas generales', 100.00, 'Asambleas'),
+    ('Abandono de ruta o "trameaje"', 75.00, 'Operaciones'),
+    ('Atraso en punto de control (tarjeta)', 5.00, 'Operaciones'),
+    ('Falta a fiesta patronal (Preste)', 300.00, 'Social'),
+    ('Peleas o altercados entre choferes', 150.00, 'Disciplina'),
+    ('No portar uniforme / Distintivo', 20.00, 'Disciplina');

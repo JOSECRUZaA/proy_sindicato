@@ -1,15 +1,30 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, CarFront, Map, CalendarCheck, Wallet, FileText, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, CarFront, Map, CalendarCheck, Wallet, FileText, Settings, LogOut, Receipt, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../context/AuthContext';
 
 const Sidebar = () => {
   const navigate = useNavigate();
+  const { profile } = useAuth();
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate('/login');
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.error("Error durante signOut:", err);
+    }
+    localStorage.clear(); // Limpiar tokens residuales de Supabase
+    sessionStorage.clear(); // Limpiar sesión actual
+    window.location.href = '/login'; // Redirección dura para reiniciar todo el estado de React en memoria
   };
+
+  const userRol = profile?.rol || '';
+  const isAdministrador = userRol.includes('Administrador');
+  const isSecretario = userRol === 'Secretario';
+  const isTesorero = userRol === 'Tesorero';
+  const isControlador = userRol === 'Controlador';
+  const isAfiliado = userRol === 'Afiliado' || userRol === 'Consulta';
 
   return (
     <aside className="sidebar">
@@ -21,46 +36,96 @@ const Sidebar = () => {
       </div>
 
       <ul style={{ listStyle: 'none', padding: '0 1rem', flex: 1, overflowY: 'auto' }}>
-        <li style={{ marginBottom: '0.5rem' }}>
-          <NavLink to="/dashboard" end className={({ isActive }) => `nav-link-sidebar ${isActive ? 'active' : ''}`} style={navLinkStyle}>
-            <LayoutDashboard size={20} /> <span>Panel General</span>
-          </NavLink>
-        </li>
-        <li style={{ marginBottom: '0.5rem' }}>
-          <NavLink to="/dashboard/afiliados" className={({ isActive }) => `nav-link-sidebar ${isActive ? 'active' : ''}`} style={navLinkStyle}>
-            <Users size={20} /> <span>Afiliados</span>
-          </NavLink>
-        </li>
-        <li style={{ marginBottom: '0.5rem' }}>
-          <NavLink to="/dashboard/vehiculos" className={({ isActive }) => `nav-link-sidebar ${isActive ? 'active' : ''}`} style={navLinkStyle}>
-            <CarFront size={20} /> <span>Parque Automotor</span>
-          </NavLink>
-        </li>
-        <li style={{ marginBottom: '0.5rem' }}>
-          <NavLink to="/dashboard/rutas" className={({ isActive }) => `nav-link-sidebar ${isActive ? 'active' : ''}`} style={navLinkStyle}>
-            <Map size={20} /> <span>Rutas y Operaciones</span>
-          </NavLink>
-        </li>
-        <li style={{ marginBottom: '0.5rem' }}>
-          <NavLink to="/dashboard/asambleas" className={({ isActive }) => `nav-link-sidebar ${isActive ? 'active' : ''}`} style={navLinkStyle}>
-            <CalendarCheck size={20} /> <span>Asambleas</span>
-          </NavLink>
-        </li>
-        <li style={{ marginBottom: '0.5rem' }}>
-          <NavLink to="/dashboard/hacienda" className={({ isActive }) => `nav-link-sidebar ${isActive ? 'active' : ''}`} style={navLinkStyle}>
-            <Wallet size={20} /> <span>Hacienda</span>
-          </NavLink>
-        </li>
-        <li style={{ marginBottom: '0.5rem' }}>
-          <NavLink to="/dashboard/reportes" className={({ isActive }) => `nav-link-sidebar ${isActive ? 'active' : ''}`} style={navLinkStyle}>
-            <FileText size={20} /> <span>Reportes</span>
-          </NavLink>
-        </li>
-        <li style={{ marginBottom: '0.5rem' }}>
-          <NavLink to="/dashboard/usuarios" className={({ isActive }) => `nav-link-sidebar ${isActive ? 'active' : ''}`} style={navLinkStyle}>
-            <Settings size={20} /> <span>Gestión de Usuarios</span>
-          </NavLink>
-        </li>
+        
+        {/* PANEL GENERAL - Solo Administrador */}
+        {isAdministrador && (
+          <li style={{ marginBottom: '0.5rem' }}>
+            <NavLink to="/dashboard" end className={({ isActive }) => `nav-link-sidebar ${isActive ? 'active' : ''}`} style={navLinkStyle}>
+              <LayoutDashboard size={20} /> <span>Panel General</span>
+            </NavLink>
+          </li>
+        )}
+
+        {/* AFILIADOS - Administrador y Secretario */}
+        {(isAdministrador || isSecretario) && (
+          <li style={{ marginBottom: '0.5rem' }}>
+            <NavLink to="/dashboard/afiliados" className={({ isActive }) => `nav-link-sidebar ${isActive ? 'active' : ''}`} style={navLinkStyle}>
+              <Users size={20} /> <span>Afiliados</span>
+            </NavLink>
+          </li>
+        )}
+
+        {/* PARQUE AUTOMOTOR - Solo Administrador */}
+        {isAdministrador && (
+          <li style={{ marginBottom: '0.5rem' }}>
+            <NavLink to="/dashboard/vehiculos" className={({ isActive }) => `nav-link-sidebar ${isActive ? 'active' : ''}`} style={navLinkStyle}>
+              <CarFront size={20} /> <span>Parque Automotor</span>
+            </NavLink>
+          </li>
+        )}
+
+        {/* RUTAS Y OPERACIONES - Solo Administrador */}
+        {isAdministrador && (
+          <li style={{ marginBottom: '0.5rem' }}>
+            <NavLink to="/dashboard/rutas" className={({ isActive }) => `nav-link-sidebar ${isActive ? 'active' : ''}`} style={navLinkStyle}>
+              <Map size={20} /> <span>Rutas y Operaciones</span>
+            </NavLink>
+          </li>
+        )}
+
+        {/* ASAMBLEAS - Administrador y Secretario */}
+        {(isAdministrador || isSecretario) && (
+          <li style={{ marginBottom: '0.5rem' }}>
+            <NavLink to="/dashboard/asambleas" className={({ isActive }) => `nav-link-sidebar ${isActive ? 'active' : ''}`} style={navLinkStyle}>
+              <CalendarCheck size={20} /> <span>Asambleas</span>
+            </NavLink>
+          </li>
+        )}
+
+        {/* HACIENDA (Cobro de cuotas y multas) - Administrador y Tesorero */}
+        {(isAdministrador || isTesorero) && (
+          <li style={{ marginBottom: '0.5rem' }}>
+            <NavLink to="/dashboard/hacienda" className={({ isActive }) => `nav-link-sidebar ${isActive ? 'active' : ''}`} style={navLinkStyle}>
+              <Wallet size={20} /> <span>Hacienda</span>
+            </NavLink>
+          </li>
+        )}
+
+        {/* REPORTES - Administrador, Secretario y Tesorero */}
+        {(isAdministrador || isSecretario || isTesorero) && (
+          <li style={{ marginBottom: '0.5rem' }}>
+            <NavLink to="/dashboard/reportes" className={({ isActive }) => `nav-link-sidebar ${isActive ? 'active' : ''}`} style={navLinkStyle}>
+              <FileText size={20} /> <span>Reportes</span>
+            </NavLink>
+          </li>
+        )}
+
+        {/* CONTROL DE MULTAS - Administrador, Secretario y Controlador */}
+        {(isAdministrador || isSecretario || isControlador) && (
+          <li style={{ marginBottom: '0.5rem' }}>
+            <NavLink to="/dashboard/controlador" className={({ isActive }) => `nav-link-sidebar ${isActive ? 'active' : ''}`} style={navLinkStyle}>
+              <Receipt size={20} /> <span>Control de Multas</span>
+            </NavLink>
+          </li>
+        )}
+
+        {/* PORTAL AFILIADO - Solo Afiliado */}
+        {isAfiliado && (
+          <li style={{ marginBottom: '0.5rem' }}>
+            <NavLink to="/dashboard/mi-panel" className={({ isActive }) => `nav-link-sidebar ${isActive ? 'active' : ''}`} style={navLinkStyle}>
+              <User size={20} /> <span>Mi Panel Personal</span>
+            </NavLink>
+          </li>
+        )}
+
+        {/* GESTIÓN DE USUARIOS - Solo Administrador */}
+        {isAdministrador && (
+          <li style={{ marginBottom: '0.5rem' }}>
+            <NavLink to="/dashboard/usuarios" className={({ isActive }) => `nav-link-sidebar ${isActive ? 'active' : ''}`} style={navLinkStyle}>
+              <Settings size={20} /> <span>Gestión de Usuarios</span>
+            </NavLink>
+          </li>
+        )}
       </ul>
 
       <ul style={{ listStyle: 'none', padding: '0 1rem', borderTop: '1px solid var(--border-light)', paddingTop: '1rem' }}>

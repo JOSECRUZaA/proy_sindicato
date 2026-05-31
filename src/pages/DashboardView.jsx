@@ -1,10 +1,23 @@
-import React from 'react';
-import { Outlet } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import { useAuth } from '../context/AuthContext';
 
 const DashboardView = () => {
   const { profile } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (profile && (location.pathname === '/dashboard' || location.pathname === '/dashboard/')) {
+      const userRol = profile.rol || '';
+      if (userRol === 'Controlador') {
+        navigate('/dashboard/controlador', { replace: true });
+      } else if (userRol === 'Afiliado' || userRol === 'Consulta') {
+        navigate('/dashboard/mi-panel', { replace: true });
+      }
+    }
+  }, [profile, location.pathname, navigate]);
 
   return (
     <div className="app-container">

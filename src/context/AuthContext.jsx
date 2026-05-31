@@ -14,16 +14,16 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     let isMounted = true;
+    let fallbackTimer = null;
     
-    // Timeout de seguridad: Si pasan 5 segundos y sigue cargando, forzar la salida y limpiar caché
-    const fallbackTimer = setTimeout(() => {
+    // Timeout de seguridad: Si pasan 20 segundos y sigue cargando, liberar la pantalla de carga de forma segura
+    fallbackTimer = setTimeout(() => {
       if (isMounted) {
-        console.warn('Timeout detectado. Limpiando caché local...');
-        localStorage.clear(); // Destrabar Supabase si hay un lock corrupto
-        setErrorLog('Timeout: El navegador no pudo cargar tu sesión. La caché ha sido limpiada.');
+        console.warn('Timeout de seguridad de 20s alcanzado. Liberando pantalla sin borrar sesión...');
+        setErrorLog('El servidor de base de datos tardó más de lo esperado en responder.');
         setLoading(false);
       }
-    }, 5000);
+    }, 20000);
 
     const checkSession = async () => {
       try {
@@ -40,6 +40,10 @@ export const AuthProvider = ({ children }) => {
         if (isMounted) {
           setErrorLog('Error en getSession: ' + err.message);
           setLoading(false);
+        }
+      } finally {
+        if (isMounted && fallbackTimer) {
+          clearTimeout(fallbackTimer);
         }
       }
     };
@@ -58,7 +62,7 @@ export const AuthProvider = ({ children }) => {
 
     return () => {
       isMounted = false;
-      clearTimeout(fallbackTimer);
+      if (fallbackTimer) clearTimeout(fallbackTimer);
       subscription.unsubscribe();
     };
   }, []);
@@ -71,7 +75,8 @@ export const AuthProvider = ({ children }) => {
         .select(`
           id_usuario,
           estado,
-          personas ( nombres, paterno, materno, fotografia ),
+          id_persona,
+          personas ( id_persona, nombres, paterno, materno, ci, fotografia ),
           roles ( nombre )
         `)
         .eq('auth_user_id', authId)
@@ -80,6 +85,8 @@ export const AuthProvider = ({ children }) => {
       if (!error && data) {
         setProfile({
           id: data.id_usuario,
+          idPersona: data.id_persona,
+          ci: data.personas.ci,
           nombreCompleto: `${data.personas.nombres} ${data.personas.paterno}`,
           rol: data.roles.nombre,
           foto: data.personas.fotografia
@@ -88,6 +95,7 @@ export const AuthProvider = ({ children }) => {
         // Si no tiene perfil aún (usuario de prueba sin completar), le damos un rol por defecto para pruebas
         setProfile({
           id: 0,
+          idPersona: 0,
           nombreCompleto: "Usuario de Prueba",
           rol: "Administrador (Por defecto)"
         });

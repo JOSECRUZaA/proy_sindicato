@@ -12,6 +12,8 @@ import Asambleas from './pages/Asambleas';
 import Hacienda from './pages/Hacienda';
 import Reportes from './pages/Reportes';
 import Usuarios from './pages/Usuarios';
+import ControladorMultas from './pages/ControladorMultas';
+import AfiliadoPortal from './pages/AfiliadoPortal';
 
 function App() {
   return (
@@ -30,6 +32,8 @@ function App() {
             <Route path="hacienda" element={<Hacienda />} />
             <Route path="reportes" element={<Reportes />} />
             <Route path="usuarios" element={<Usuarios />} />
+            <Route path="controlador" element={<ControladorMultas />} />
+            <Route path="mi-panel" element={<AfiliadoPortal />} />
           </Route>
         </Routes>
       </BrowserRouter>
