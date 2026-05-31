@@ -83,7 +83,7 @@ const Login = () => {
           {!isEnvConfigured && (
             <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', color: '#b45309', padding: '1rem', borderRadius: '12px', marginBottom: '1.5rem', fontSize: '0.85rem', lineHeight: '1.5', textAlign: 'left' }}>
               <strong>⚠️ Variables de Entorno Faltantes en Vercel:</strong><br />
-              No se han detectado las credenciales de Supabase en este despliegue. Por favor ve a tu consola de <strong>Vercel -> Settings -> Environment Variables</strong> y agrega:
+              No se han detectado las credenciales de Supabase en este despliegue. Por favor ve a tu consola de <strong>Vercel / Settings / Environment Variables</strong> y agrega:
               <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.2rem' }}>
                 <li><code>VITE_SUPABASE_URL</code></li>
                 <li><code>VITE_SUPABASE_ANON_KEY</code></li>
