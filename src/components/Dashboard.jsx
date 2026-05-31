@@ -20,55 +20,50 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      // 1. Total Afiliados
-      const { count: countAfiliados } = await supabase
-        .from('afiliados')
-        .select('*', { count: 'exact', head: true });
-        
-      // 2. Vehículos Activos
-      const { count: countVehiculos } = await supabase
-        .from('vehiculos')
-        .select('*', { count: 'exact', head: true })
-        .eq('estado', 'Operativo');
-        
-      // 3. Cuotas Pendientes
-      const { count: countCuotas } = await supabase
-        .from('cuotas')
-        .select('*', { count: 'exact', head: true })
-        .eq('estado', 'Pendiente');
-        
-      // 4. Recaudación Mensual (Cancelado este mes)
       const date = new Date();
       const currentMonth = date.getMonth() + 1;
       const currentYear = date.getFullYear();
-      
-      const { data: pagos } = await supabase
-        .from('cuotas')
-        .select('monto_bs')
-        .eq('estado', 'Cancelado')
-        .eq('mes', currentMonth)
-        .eq('gestion', currentYear);
-        
-      const recaudacion = pagos ? pagos.reduce((sum, pago) => sum + parseFloat(pago.monto_bs), 0) : 0;
+
+      // Lanzar todas las peticiones independientes en paralelo
+      const [
+        resAfiliados,
+        resVehiculos,
+        resCuotas,
+        resPagos,
+        resRecientes
+      ] = await Promise.all([
+        supabase.from('afiliados').select('*', { count: 'exact', head: true }),
+        supabase.from('vehiculos').select('*', { count: 'exact', head: true }).eq('estado', 'Operativo'),
+        supabase.from('cuotas').select('*', { count: 'exact', head: true }).eq('estado', 'Pendiente'),
+        supabase.from('cuotas').select('monto_bs').eq('estado', 'Cancelado').eq('mes', currentMonth).eq('gestion', currentYear),
+        supabase.from('afiliados').select(`
+          id_afiliado, numero_afiliado, tipo_afiliado, estado_organico,
+          personas ( nombres, paterno, ci )
+        `).order('id_afiliado', { ascending: false }).limit(5)
+      ]);
+
+      if (resAfiliados.error) throw resAfiliados.error;
+      if (resVehiculos.error) throw resVehiculos.error;
+      if (resCuotas.error) throw resCuotas.error;
+      if (resPagos.error) throw resPagos.error;
+      if (resRecientes.error) throw resRecientes.error;
+
+      const countAfiliados = resAfiliados.count || 0;
+      const countVehiculos = resVehiculos.count || 0;
+      const countCuotas = resCuotas.count || 0;
+      const pagos = resPagos.data || [];
+      const recientes = resRecientes.data || [];
+
+      const recaudacion = pagos.reduce((sum, pago) => sum + parseFloat(pago.monto_bs), 0);
       
       setStats({
-        totalAfiliados: countAfiliados || 0,
-        vehiculosActivos: countVehiculos || 0,
-        cuotasPendientes: countCuotas || 0,
+        totalAfiliados: countAfiliados,
+        vehiculosActivos: countVehiculos,
+        cuotasPendientes: countCuotas,
         recaudacionMes: recaudacion
       });
 
-      // 5. Últimos 5 afiliados registrados
-      const { data: recientes } = await supabase
-        .from('afiliados')
-        .select(`
-          id_afiliado, numero_afiliado, tipo_afiliado, estado_organico,
-          personas ( nombres, paterno, ci )
-        `)
-        .order('id_afiliado', { ascending: false })
-        .limit(5);
-        
-      setRecentAfiliados(recientes || []);
+      setRecentAfiliados(recientes);
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     } finally {

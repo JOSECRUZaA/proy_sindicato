@@ -49,47 +49,36 @@ const AfiliadoPortal = () => {
 
       setAffiliate(affData);
 
-      // 2. Obtener vehículos de propiedad (Socio Propietario)
-      const { data: ownedData } = await supabase
-        .from('vehiculos')
-        .select('*')
-        .eq('id_propietario', affData.id_afiliado);
-
-      setVehicles(ownedData || []);
-
-      // 3. Obtener vehículos asignados como Chofer/Relevo
-      const { data: driveData } = await supabase
-        .from('chofer_vehiculo')
-        .select(`
+      // Lanzar las 4 consultas financieras y de vehículos en paralelo
+      const [
+        resOwned,
+        resDrive,
+        resCuotas,
+        resMultas
+      ] = await Promise.all([
+        supabase.from('vehiculos').select('*').eq('id_propietario', affData.id_afiliado),
+        supabase.from('chofer_vehiculo').select(`
           vehiculos ( id_vehiculo, numero_disco, placa, numero_linea, marca, modelo, estado )
-        `)
-        .eq('id_chofer', affData.id_afiliado)
-        .eq('estado', 1)
-        .is('fecha_fin', null);
-
-      const resolvedDriven = driveData?.map(d => d.vehiculos).filter(Boolean) || [];
-      setDrivenVehicles(resolvedDriven);
-
-      // 4. Obtener cuotas sindicales
-      const { data: cuotasData } = await supabase
-        .from('cuotas')
-        .select(`
+        `).eq('id_chofer', affData.id_afiliado).eq('estado', 1).is('fecha_fin', null),
+        supabase.from('cuotas').select(`
           id_cuota, gestion, mes, monto_bs, estado, fecha_registro,
           tipos_cuota ( nombre )
-        `)
-        .eq('id_afiliado', affData.id_afiliado)
-        .order('fecha_registro', { ascending: false });
+        `).eq('id_afiliado', affData.id_afiliado).order('fecha_registro', { ascending: false }),
+        supabase.from('multas').select('*').eq('id_afiliado', affData.id_afiliado).order('fecha_emision', { ascending: false })
+      ]);
 
-      setCuotas(cuotasData || []);
+      const ownedData = resOwned.data || [];
+      const driveData = resDrive.data || [];
+      const cuotasData = resCuotas.data || [];
+      const multasData = resMultas.data || [];
 
-      // 5. Obtener multas
-      const { data: multasData } = await supabase
-        .from('multas')
-        .select('*')
-        .eq('id_afiliado', affData.id_afiliado)
-        .order('fecha_emision', { ascending: false });
+      setVehicles(ownedData);
 
-      setMultas(multasData || []);
+      const resolvedDriven = driveData.map(d => d.vehiculos).filter(Boolean);
+      setDrivenVehicles(resolvedDriven);
+
+      setCuotas(cuotasData);
+      setMultas(multasData);
 
     } catch (err) {
       console.error(err);
