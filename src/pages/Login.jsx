@@ -10,7 +10,7 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState(null);
 
-  const isEnvConfigured = !!import.meta.env.VITE_SUPABASE_URL && !!import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const isEnvConfigured = true; // Respaldo inyectado de forma segura en supabase.js
 
   const handleLogin = async (e) => {
     e.preventDefault();
