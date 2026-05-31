@@ -73,7 +73,8 @@ const ControladorMultas = () => {
 
   const handleSearch = async (e) => {
     e.preventDefault();
-    if (!searchTerm.trim()) return;
+    const term = searchTerm.trim();
+    if (!term) return;
     
     setLoadingSearch(true);
     setVehicle(null);
@@ -83,27 +84,152 @@ const ControladorMultas = () => {
     setObservacion('');
     
     try {
-      // Buscar vehículo por número de disco o por placa
-      let query = supabase.from('vehiculos').select(`
-        id_vehiculo, numero_disco, placa, numero_linea, marca, modelo, estado,
-        afiliados ( id_afiliado, numero_afiliado, personas ( nombres, paterno ) )
-      `);
+      let matchedVehicles = [];
+      const isNum = !isNaN(term) && !isNaN(parseFloat(term));
       
-      if (isNaN(searchTerm)) {
-        query = query.ilike('placa', `%${searchTerm}%`);
-      } else {
-        query = query.eq('numero_disco', parseInt(searchTerm));
+      // 1. Intentar buscar directamente por número de disco en vehículos
+      if (isNum) {
+        const { data: vehsByDisco, error: err1 } = await supabase
+          .from('vehiculos')
+          .select(`
+            id_vehiculo, numero_disco, placa, numero_linea, marca, modelo, estado,
+            afiliados ( id_afiliado, numero_afiliado, personas ( nombres, paterno ) )
+          `)
+          .eq('numero_disco', parseInt(term));
+          
+        if (!err1 && vehsByDisco && vehsByDisco.length > 0) {
+          matchedVehicles = vehsByDisco;
+        }
       }
       
-      const { data: vehs, error } = await query;
-      if (error) throw error;
+      // 2. Si no se encontró por disco, buscar por placa
+      if (matchedVehicles.length === 0) {
+        const { data: vehsByPlaca, error: err2 } = await supabase
+          .from('vehiculos')
+          .select(`
+            id_vehiculo, numero_disco, placa, numero_linea, marca, modelo, estado,
+            afiliados ( id_afiliado, numero_afiliado, personas ( nombres, paterno ) )
+          `)
+          .ilike('placa', `%${term}%`);
+          
+        if (!err2 && vehsByPlaca && vehsByPlaca.length > 0) {
+          matchedVehicles = vehsByPlaca;
+        }
+      }
       
-      if (!vehs || vehs.length === 0) {
-        alert("Vehículo no encontrado. Verifique la placa o disco.");
+      // 3. Si no se encontró, buscar por número de afiliado (como "AF-2551")
+      if (matchedVehicles.length === 0) {
+        const { data: matchedAffs, error: err3 } = await supabase
+          .from('afiliados')
+          .select('id_afiliado')
+          .ilike('numero_afiliado', `%${term}%`);
+          
+        if (!err3 && matchedAffs && matchedAffs.length > 0) {
+          const affIds = matchedAffs.map(a => a.id_afiliado);
+          
+          // Buscar vehículos donde el propietario sea uno de estos afiliados
+          const { data: vehsByOwner, error: errOwner } = await supabase
+            .from('vehiculos')
+            .select(`
+              id_vehiculo, numero_disco, placa, numero_linea, marca, modelo, estado,
+              afiliados ( id_afiliado, numero_afiliado, personas ( nombres, paterno ) )
+            `)
+            .in('id_propietario', affIds);
+            
+          if (!errOwner && vehsByOwner && vehsByOwner.length > 0) {
+            matchedVehicles = vehsByOwner;
+          } else {
+            // O buscar vehículos donde el chofer asignado sea uno de estos afiliados
+            const { data: choferBinds } = await supabase
+              .from('chofer_vehiculo')
+              .select('id_vehiculo')
+              .in('id_chofer', affIds)
+              .eq('estado', 1)
+              .is('fecha_fin', null);
+              
+            if (choferBinds && choferBinds.length > 0) {
+              const vehIds = choferBinds.map(b => b.id_vehiculo);
+              const { data: vehsByChofer } = await supabase
+                .from('vehiculos')
+                .select(`
+                  id_vehiculo, numero_disco, placa, numero_linea, marca, modelo, estado,
+                  afiliados ( id_afiliado, numero_afiliado, personas ( nombres, paterno ) )
+                `)
+                .in('id_vehiculo', vehIds);
+                
+              if (vehsByChofer && vehsByChofer.length > 0) {
+                matchedVehicles = vehsByChofer;
+              }
+            }
+          }
+        }
+      }
+      
+      // 4. Si aún no se encontró, buscar por nombres o apellidos del afiliado
+      if (matchedVehicles.length === 0) {
+        // Buscar personas cuyo nombre o apellido coincida
+        const { data: matchedPers, error: errPers } = await supabase
+          .from('personas')
+          .select('id_persona')
+          .or(`nombres.ilike.%${term}%,paterno.ilike.%${term}%,materno.ilike.%${term}%`);
+          
+        if (!errPers && matchedPers && matchedPers.length > 0) {
+          const persIds = matchedPers.map(p => p.id_persona);
+          
+          // Buscar afiliados con estas personas
+          const { data: matchedAffsByPers } = await supabase
+            .from('afiliados')
+            .select('id_afiliado')
+            .in('id_persona', persIds);
+            
+          if (matchedAffsByPers && matchedAffsByPers.length > 0) {
+            const affIds = matchedAffsByPers.map(a => a.id_afiliado);
+            
+            // Buscar vehículos de propiedad
+            const { data: vehsByOwnerName } = await supabase
+              .from('vehiculos')
+              .select(`
+                id_vehiculo, numero_disco, placa, numero_linea, marca, modelo, estado,
+                afiliados ( id_afiliado, numero_afiliado, personas ( nombres, paterno ) )
+              `)
+              .in('id_propietario', affIds);
+              
+            if (vehsByOwnerName && vehsByOwnerName.length > 0) {
+              matchedVehicles = vehsByOwnerName;
+            } else {
+              // Buscar vehículos donde conduce
+              const { data: choferBindsName } = await supabase
+                .from('chofer_vehiculo')
+                .select('id_vehiculo')
+                .in('id_chofer', affIds)
+                .eq('estado', 1)
+                .is('fecha_fin', null);
+                
+              if (choferBindsName && choferBindsName.length > 0) {
+                const vehIds = choferBindsName.map(b => b.id_vehiculo);
+                const { data: vehsByChoferName } = await supabase
+                  .from('vehiculos')
+                  .select(`
+                    id_vehiculo, numero_disco, placa, numero_linea, marca, modelo, estado,
+                    afiliados ( id_afiliado, numero_afiliado, personas ( nombres, paterno ) )
+                  `)
+                  .in('id_vehiculo', vehIds);
+                  
+                if (vehsByChoferName && vehsByChoferName.length > 0) {
+                  matchedVehicles = vehsByChoferName;
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      if (matchedVehicles.length === 0) {
+        alert(`No se encontró ningún vehículo o afiliado para la búsqueda: "${term}".\n\nPruebe buscando por:\n• Número de Disco (Ej: 75)\n• Placa del vehículo (Ej: 2551-LPT)\n• Código de Afiliado (Ej: AF-2551)`);
         return;
       }
       
-      const selectedVeh = vehs[0];
+      const selectedVeh = matchedVehicles[0];
       setVehicle(selectedVeh);
       
       // Buscar si el vehículo tiene chofer asignado activo
