@@ -4,84 +4,58 @@ import { Search, Plus, UserPlus, Edit, Trash2, X, Shield, ShieldAlert, Key } fro
 
 const Usuarios = () => {
   const [usuarios, setUsuarios] = useState([]);
-  const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
   const [formData, setFormData] = useState({
-    id_usuario: '',
-    id_persona: '',
+    id_perfil: '',
     nombres: '',
     paterno: '',
     ci: '',
+    correo: '',
     celular: '',
-    id_rol: '',
+    rol: '',
     estado: '1' // '1' = Activo, '0' = Inactivo
   });
 
+  const roles = ['Administrador', 'Secretario', 'Tesorero', 'Consulta', 'Controlador'];
+
   useEffect(() => {
     fetchUsuarios();
-    fetchRoles();
   }, []);
 
   const fetchUsuarios = async () => {
     try {
       setLoading(true);
+      // Solo traemos los que son usuarios administrativos (roles distintos a Afiliado, a menos que queramos verlos a todos)
+      // Para simplificar, traemos todos y filtramos en frontend, o filtramos en DB.
       const { data, error } = await supabase
-        .from('usuarios')
+        .from('perfiles')
         .select(`
-          id_usuario, estado, fecha_creacion, id_persona, id_rol,
-          personas ( id_persona, nombres, paterno, ci, celular ),
-          roles ( id_rol, nombre )
+          id_perfil, estado, fecha_registro, nombres, paterno, ci, correo, celular, rol
         `)
-        .order('fecha_creacion', { ascending: false });
+        .order('fecha_registro', { ascending: false });
         
       if (error) throw error;
       setUsuarios(data || []);
     } catch (err) {
-      console.error("Error al cargar usuarios:", err);
+      console.error("Error al cargar perfiles:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchRoles = async () => {
-    try {
-      const { data, error } = await supabase.from('roles').select('*');
-      if (!error && data && data.length > 0) {
-        setRoles(data);
-      } else {
-        // Fallback robusto en la UI en caso de que la tabla roles esté vacía o RLS restrinja el acceso anon
-        setRoles([
-          { id_rol: 1, nombre: 'Administrador' },
-          { id_rol: 2, nombre: 'Secretario' },
-          { id_rol: 3, nombre: 'Tesorero' },
-          { id_rol: 4, nombre: 'Consulta' },
-          { id_rol: 5, nombre: 'Controlador' }
-        ]);
-      }
-    } catch (e) {
-      setRoles([
-        { id_rol: 1, nombre: 'Administrador' },
-        { id_rol: 2, nombre: 'Secretario' },
-        { id_rol: 3, nombre: 'Tesorero' },
-        { id_rol: 4, nombre: 'Consulta' },
-        { id_rol: 5, nombre: 'Controlador' }
-      ]);
-    }
-  };
-
   const resetForm = () => {
     setFormData({
-      id_usuario: '',
-      id_persona: '',
+      id_perfil: '',
       nombres: '',
       paterno: '',
       ci: '',
+      correo: '',
       celular: '',
-      id_rol: '',
+      rol: '',
       estado: '1'
     });
     setIsEditing(false);
@@ -95,89 +69,46 @@ const Usuarios = () => {
     e.preventDefault();
     try {
       if (isEditing) {
-        // MODO EDICIÓN
-        // 1. Actualizar datos de la persona
-        const { error: personaError } = await supabase
-          .from('personas')
+        const { error } = await supabase
+          .from('perfiles')
           .update({
             nombres: formData.nombres,
             paterno: formData.paterno,
             ci: formData.ci,
-            celular: formData.celular
-          })
-          .eq('id_persona', formData.id_persona);
-
-        if (personaError) throw personaError;
-
-        // 2. Actualizar datos del usuario (Rol y Estado)
-        const { error: usuarioError } = await supabase
-          .from('usuarios')
-          .update({
-            id_rol: formData.id_rol,
+            correo: formData.correo,
+            celular: formData.celular,
+            rol: formData.rol,
             estado: parseInt(formData.estado)
           })
-          .eq('id_usuario', formData.id_usuario);
+          .eq('id_perfil', formData.id_perfil);
 
-        if (usuarioError) throw usuarioError;
-
+        if (error) throw error;
         alert("Usuario administrativo actualizado correctamente.");
       } else {
-        // MODO REGISTRO (Mantiene la lógica inteligente de CI duplicados)
-        let personaId = null;
-
-        // 1. Buscar si la persona ya existe por C.I.
-        const { data: existingPersona, error: searchError } = await supabase
-          .from('personas')
-          .select('id_persona')
+        // Verificar CI
+        const { data: exist } = await supabase
+          .from('perfiles')
+          .select('id_perfil')
           .eq('ci', formData.ci)
           .maybeSingle();
 
-        if (searchError) throw searchError;
-
-        if (existingPersona) {
-          personaId = existingPersona.id_persona;
-
-          // Verificar si esta persona ya tiene un usuario en el sistema
-          const { data: existingUser, error: userCheckError } = await supabase
-            .from('usuarios')
-            .select('id_usuario')
-            .eq('id_persona', personaId)
-            .maybeSingle();
-
-          if (userCheckError) throw userCheckError;
-
-          if (existingUser) {
-            throw new Error("Esta persona (C.I. duplicado) ya tiene un usuario administrativo asignado en el sistema.");
-          }
-        } else {
-          // 2. Crear persona si no existe en el padrón
-          const { data: personaData, error: personaError } = await supabase
-            .from('personas')
-            .insert([{
-              nombres: formData.nombres,
-              paterno: formData.paterno,
-              ci: formData.ci,
-              celular: formData.celular,
-              estado: 1
-            }])
-            .select()
-            .single();
-            
-          if (personaError) throw personaError;
-          personaId = personaData.id_persona;
+        if (exist) {
+          throw new Error("Esta persona (C.I. duplicado) ya tiene un perfil en el sistema.");
         }
 
-        // 3. Crear registro de usuario vinculándolo al id_persona (existente o nuevo)
-        const { error: usuarioError } = await supabase
-          .from('usuarios')
+        const { error } = await supabase
+          .from('perfiles')
           .insert([{
-            id_persona: personaId,
-            id_rol: formData.id_rol,
+            nombres: formData.nombres,
+            paterno: formData.paterno,
+            ci: formData.ci,
+            correo: formData.correo,
+            celular: formData.celular,
+            rol: formData.rol,
             estado: 1
           }]);
 
-        if (usuarioError) throw usuarioError;
-
+        if (error) throw error;
         alert("Usuario administrativo registrado con éxito.");
       }
 
@@ -191,26 +122,26 @@ const Usuarios = () => {
 
   const handleEditClick = (u) => {
     setFormData({
-      id_usuario: u.id_usuario,
-      id_persona: u.personas?.id_persona || '',
-      nombres: u.personas?.nombres || '',
-      paterno: u.personas?.paterno || '',
-      ci: u.personas?.ci || '',
-      celular: u.personas?.celular || '',
-      id_rol: u.id_rol || '',
+      id_perfil: u.id_perfil,
+      nombres: u.nombres || '',
+      paterno: u.paterno || '',
+      ci: u.ci || '',
+      correo: u.correo || '',
+      celular: u.celular || '',
+      rol: u.rol || '',
       estado: u.estado.toString()
     });
     setIsEditing(true);
     setShowModal(true);
   };
 
-  const handleDeleteClick = async (idUsuario) => {
-    if (!window.confirm("¿Está seguro de revocar el acceso administrativo a este usuario? Los registros históricos y de auditoría se mantendrán intactos.")) return;
+  const handleDeleteClick = async (idPerfil) => {
+    if (!window.confirm("¿Está seguro de revocar el acceso a este perfil?")) return;
     try {
       const { error } = await supabase
-        .from('usuarios')
+        .from('perfiles')
         .delete()
-        .eq('id_usuario', idUsuario);
+        .eq('id_perfil', idPerfil);
 
       if (error) throw error;
       alert("Acceso revocado exitosamente.");
@@ -220,21 +151,20 @@ const Usuarios = () => {
     }
   };
 
-  // Filtrado de usuarios por término de búsqueda
   const filteredUsuarios = usuarios.filter(u => 
-    (u.personas?.nombres && u.personas.nombres.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (u.personas?.paterno && u.personas.paterno.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (u.personas?.ci && u.personas.ci.includes(searchTerm)) ||
-    (u.roles?.nombre && u.roles.nombre.toLowerCase().includes(searchTerm.toLowerCase()))
+    (u.nombres && u.nombres.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (u.paterno && u.paterno.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (u.ci && u.ci.includes(searchTerm)) ||
+    (u.rol && u.rol.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const getRoleBadgeClass = (roleName) => {
     if (!roleName) return 'badge-secondary';
     const name = roleName.toLowerCase();
-    if (name.includes('admin')) return 'badge-danger'; // Red
-    if (name.includes('secret')) return 'badge-warning'; // Yellow
-    if (name.includes('tesor')) return 'badge-success';  // Green/Emerald
-    if (name.includes('control')) return 'badge-warning'; // Orange/Yellow
+    if (name.includes('admin')) return 'badge-danger';
+    if (name.includes('secret')) return 'badge-warning';
+    if (name.includes('tesor')) return 'badge-success';
+    if (name.includes('control')) return 'badge-warning';
     return 'badge-secondary';
   };
 
@@ -272,6 +202,7 @@ const Usuarios = () => {
                 <tr>
                   <th>Nombre Completo</th>
                   <th>Cédula (CI)</th>
+                  <th>Correo</th>
                   <th>Contacto</th>
                   <th>Rol de Acceso</th>
                   <th>Estado</th>
@@ -280,19 +211,20 @@ const Usuarios = () => {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>Cargando datos de usuarios...</td></tr>
+                  <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>Cargando datos de perfiles...</td></tr>
                 ) : filteredUsuarios.length === 0 ? (
                   <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No se encontraron usuarios.</td></tr>
                 ) : (
                   filteredUsuarios.map(u => (
-                    <tr key={u.id_usuario}>
-                      <td style={{ fontWeight: '600' }}>{u.personas?.nombres} {u.personas?.paterno}</td>
-                      <td style={{ fontWeight: '500' }}>{u.personas?.ci}</td>
-                      <td>{u.personas?.celular || <span style={{ color: 'var(--text-light)', fontStyle: 'italic', fontSize: '0.85rem' }}>No registrado</span>}</td>
+                    <tr key={u.id_perfil}>
+                      <td style={{ fontWeight: '600' }}>{u.nombres} {u.paterno}</td>
+                      <td style={{ fontWeight: '500' }}>{u.ci}</td>
+                      <td>{u.correo || <span style={{ color: 'var(--text-light)', fontStyle: 'italic', fontSize: '0.85rem' }}>No registrado</span>}</td>
+                      <td>{u.celular || <span style={{ color: 'var(--text-light)', fontStyle: 'italic', fontSize: '0.85rem' }}>No registrado</span>}</td>
                       <td>
-                        <span className={`badge ${getRoleBadgeClass(u.roles?.nombre)}`} style={{ gap: '0.25rem', display: 'inline-flex', alignItems: 'center' }}>
+                        <span className={`badge ${getRoleBadgeClass(u.rol)}`} style={{ gap: '0.25rem', display: 'inline-flex', alignItems: 'center' }}>
                           <Shield size={12} />
-                          {u.roles?.nombre || 'Consulta'}
+                          {u.rol || 'Consulta'}
                         </span>
                       </td>
                       <td>
@@ -313,7 +245,7 @@ const Usuarios = () => {
                           className="btn btn-secondary" 
                           style={{ padding: '0.4rem', color: '#ef4444' }}
                           title="Revocar Acceso"
-                          onClick={() => handleDeleteClick(u.id_usuario)}
+                          onClick={() => handleDeleteClick(u.id_perfil)}
                         >
                           <Trash2 size={16} />
                         </button>
@@ -330,8 +262,14 @@ const Usuarios = () => {
       {showModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="auth-card animate-fade" style={{ maxWidth: '650px', width: '90%', padding: '2rem 2.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-              <h2 style={{ fontSize: '1.5rem' }}>{isEditing ? 'Editar Perfil de Acceso' : 'Crear Nuevo Acceso Administrativo'}</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <img src="/logo-sindicato.jpg" alt="Logo Sindicato" style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '1.5px solid var(--primary)' }} />
+                <div>
+                  <h2 style={{ fontSize: '1.5rem', margin: 0 }}>{isEditing ? 'Editar Perfil' : 'Crear Nuevo Perfil'}</h2>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Sindicato 15 de Junio - La Paz</p>
+                </div>
+              </div>
               <button onClick={() => { setShowModal(false); resetForm(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={24} /></button>
             </div>
             
@@ -342,6 +280,10 @@ const Usuarios = () => {
                 <div className="form-group"><label className="form-label">Apellido Paterno</label><input type="text" name="paterno" className="form-control" value={formData.paterno} onChange={handleInputChange} required /></div>
                 
                 <div className="form-group" style={{ marginBottom: 0 }}><label className="form-label">Cédula de Identidad</label><input type="text" name="ci" className="form-control" value={formData.ci} onChange={handleInputChange} required disabled={isEditing} style={{ opacity: isEditing ? 0.7 : 1 }} /></div>
+                <div className="form-group" style={{ marginBottom: 0 }}><label className="form-label">Correo Electrónico</label><input type="email" name="correo" className="form-control" value={formData.correo} onChange={handleInputChange} placeholder="ejemplo@sindicato.org" /></div>
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.25rem', marginBottom: '1.5rem' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}><label className="form-label">N° de Celular</label><input type="text" name="celular" className="form-control" value={formData.celular} onChange={handleInputChange} /></div>
               </div>
 
@@ -349,10 +291,10 @@ const Usuarios = () => {
               <div style={{ display: 'grid', gridTemplateColumns: isEditing ? '2fr 1fr' : '1fr', gap: '1.25rem' }}>
                 <div className="form-group">
                   <label className="form-label">Rol del Sistema</label>
-                  <select name="id_rol" className="form-control" value={formData.id_rol} onChange={handleInputChange} required>
+                  <select name="rol" className="form-control" value={formData.rol} onChange={handleInputChange} required>
                     <option value="">Seleccione el nivel de acceso...</option>
                     {roles.map(r => (
-                      <option key={r.id_rol} value={r.id_rol}>{r.nombre}</option>
+                      <option key={r} value={r}>{r}</option>
                     ))}
                   </select>
                 </div>

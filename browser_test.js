@@ -70,7 +70,7 @@ async function runTest() {
     console.log("Página actual:", page.url());
 
     // Capturar screenshot
-    const screenshotPath = path.resolve('C:\\Users\\jcruz\\.gemini\\antigravity-ide\\brain\\b3632aa9-0e7b-4b36-ac2d-62fa8ce8a9cc\\browser_screenshot.png');
+    const screenshotPath = path.resolve('C:\\Users\\jcruz\\.gemini\\antigravity-ide\\brain\\4f17a913-0661-4a77-9b90-9e0f773f6246\\browser_screenshot.png');
     await page.screenshot({ path: screenshotPath, fullPage: true });
     
     console.log(`✅ CAPTURA DE PANTALLA GUARDADA EN: ${screenshotPath}`);

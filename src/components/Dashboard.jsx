@@ -24,7 +24,6 @@ const Dashboard = () => {
       const currentMonth = date.getMonth() + 1;
       const currentYear = date.getFullYear();
 
-      // Lanzar todas las peticiones independientes en paralelo
       const [
         resAfiliados,
         resVehiculos,
@@ -32,14 +31,14 @@ const Dashboard = () => {
         resPagos,
         resRecientes
       ] = await Promise.all([
-        supabase.from('afiliados').select('*', { count: 'exact', head: true }),
+        supabase.from('perfiles').select('*', { count: 'exact', head: true }).not('numero_afiliado', 'is', null),
         supabase.from('vehiculos').select('*', { count: 'exact', head: true }).eq('estado', 'Operativo'),
-        supabase.from('cuotas').select('*', { count: 'exact', head: true }).eq('estado', 'Pendiente'),
-        supabase.from('cuotas').select('monto_bs').eq('estado', 'Cancelado').eq('mes', currentMonth).eq('gestion', currentYear),
-        supabase.from('afiliados').select(`
-          id_afiliado, numero_afiliado, tipo_afiliado, estado_organico,
-          personas ( nombres, paterno, ci )
-        `).order('id_afiliado', { ascending: false }).limit(5)
+        supabase.from('obligaciones_financieras').select('*', { count: 'exact', head: true }).eq('estado', 'Pendiente').eq('tipo_obligacion', 'Cuota'),
+        supabase.from('obligaciones_financieras').select('monto_pagado').eq('estado', 'Pagado').eq('mes', currentMonth).eq('gestion', currentYear),
+        supabase.from('perfiles').select(`
+          id_perfil, numero_afiliado, tipo_afiliado, estado_organico,
+          nombres, paterno, ci
+        `).not('numero_afiliado', 'is', null).order('id_perfil', { ascending: false }).limit(5)
       ]);
 
       if (resAfiliados.error) throw resAfiliados.error;
@@ -54,7 +53,7 @@ const Dashboard = () => {
       const pagos = resPagos.data || [];
       const recientes = resRecientes.data || [];
 
-      const recaudacion = pagos.reduce((sum, pago) => sum + parseFloat(pago.monto_bs), 0);
+      const recaudacion = pagos.reduce((sum, pago) => sum + parseFloat(pago.monto_pagado), 0);
       
       setStats({
         totalAfiliados: countAfiliados,
@@ -143,10 +142,10 @@ const Dashboard = () => {
               <tr><td colSpan="5" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No hay afiliados registrados en el sistema.</td></tr>
             ) : (
               recentAfiliados.map(af => (
-                <tr key={af.id_afiliado}>
-                  <td style={{ fontWeight: '500' }}>{af.numero_afiliado || `AF-${af.id_afiliado.toString().padStart(4, '0')}`}</td>
-                  <td>{af.personas?.nombres} {af.personas?.paterno}</td>
-                  <td>{af.personas?.ci}</td>
+                <tr key={af.id_perfil}>
+                  <td style={{ fontWeight: '500' }}>{af.numero_afiliado || `AF-${af.id_perfil.toString().padStart(4, '0')}`}</td>
+                  <td>{af.nombres} {af.paterno}</td>
+                  <td>{af.ci}</td>
                   <td>{af.tipo_afiliado}</td>
                   <td>
                     <span className={`badge ${af.estado_organico === 'Activo' ? 'badge-success' : af.estado_organico === 'Suspendido' ? 'badge-warning' : 'badge-danger'}`}>

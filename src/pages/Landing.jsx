@@ -20,9 +20,7 @@ const Landing = () => {
       <nav className={`nav-header ${scrolled ? 'scrolled' : ''}`} style={{ borderBottom: scrolled ? '1px solid var(--border-light)' : '1px solid transparent' }}>
         <div className="container nav-container">
           <div className="nav-brand">
-            <div className="nav-brand-icon">
-              <CarFront size={24} />
-            </div>
+            <img src="/logo-sindicato.jpg" alt="Logo Sindicato" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', border: '1.5px solid var(--primary)', marginRight: '0.5rem' }} />
             SindiAuto
           </div>
           <div className="nav-menu">

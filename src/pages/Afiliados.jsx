@@ -10,7 +10,7 @@ const Afiliados = () => {
 
   // Estados del formulario
   const [formData, setFormData] = useState({
-    nombres: '', paterno: '', materno: '', ci: '', expedido: 'LP', celular: '',
+    nombres: '', paterno: '', materno: '', ci: '', celular: '',
     numero_afiliado: '', tipo_afiliado: 'Socio Propietario'
   });
 
@@ -21,23 +21,22 @@ const Afiliados = () => {
   const fetchAfiliados = async () => {
     try {
       setLoading(true);
-      // Hace un JOIN automático con la tabla personas gracias a la clave foránea
       const { data, error } = await supabase
-        .from('afiliados')
+        .from('perfiles')
         .select(`
-          id_afiliado,
+          id_perfil,
           numero_afiliado,
           tipo_afiliado,
           estado_organico,
           fecha_ingreso,
-          personas (
-            nombres,
-            paterno,
-            materno,
-            ci,
-            celular
-          )
-        `);
+          nombres,
+          paterno,
+          materno,
+          ci,
+          celular
+        `)
+        .not('numero_afiliado', 'is', null)
+        .order('numero_afiliado', { ascending: true });
 
       if (error) throw error;
       setAfiliados(data || []);
@@ -55,37 +54,54 @@ const Afiliados = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      // 1. Insertar primero en tabla personas
-      const { data: personaData, error: personaError } = await supabase
-        .from('personas')
-        .insert([{
-          nombres: formData.nombres,
-          paterno: formData.paterno,
-          materno: formData.materno,
-          ci: formData.ci,
-          expedido: formData.expedido,
-          celular: formData.celular
-        }])
-        .select()
-        .single();
+      // Verificar si ya existe el CI en perfiles
+      const { data: exist } = await supabase
+        .from('perfiles')
+        .select('id_perfil, numero_afiliado')
+        .eq('ci', formData.ci)
+        .maybeSingle();
 
-      if (personaError) throw personaError;
+      if (exist) {
+        if (exist.numero_afiliado) {
+          throw new Error("Esta persona (C.I. duplicado) ya está registrada como afiliado.");
+        }
+        // Si existe pero no es afiliado (ej. es admin), lo actualizamos
+        const { error: updateError } = await supabase
+          .from('perfiles')
+          .update({
+            numero_afiliado: formData.numero_afiliado,
+            tipo_afiliado: formData.tipo_afiliado,
+            fecha_ingreso: new Date().toISOString().split('T')[0],
+            estado_organico: 'Activo'
+          })
+          .eq('id_perfil', exist.id_perfil);
 
-      // 2. Insertar en tabla afiliados con el id_persona retornado
-      const { error: afiliadoError } = await supabase
-        .from('afiliados')
-        .insert([{
-          id_persona: personaData.id_persona,
-          numero_afiliado: formData.numero_afiliado,
-          tipo_afiliado: formData.tipo_afiliado
-        }]);
+        if (updateError) throw updateError;
+      } else {
+        // Insertar nuevo perfil de afiliado
+        const { error: insertError } = await supabase
+          .from('perfiles')
+          .insert([{
+            nombres: formData.nombres,
+            paterno: formData.paterno,
+            materno: formData.materno,
+            ci: formData.ci,
+            celular: formData.celular,
+            rol: 'Afiliado', // Por defecto
+            estado: 1,
+            numero_afiliado: formData.numero_afiliado,
+            tipo_afiliado: formData.tipo_afiliado,
+            fecha_ingreso: new Date().toISOString().split('T')[0],
+            estado_organico: 'Activo'
+          }]);
 
-      if (afiliadoError) throw afiliadoError;
+        if (insertError) throw insertError;
+      }
 
       alert("Afiliado registrado exitosamente");
       setShowModal(false);
-      setFormData({ nombres: '', paterno: '', materno: '', ci: '', expedido: 'LP', celular: '', numero_afiliado: '', tipo_afiliado: 'Socio Propietario' });
-      fetchAfiliados(); // Recargar la tabla
+      setFormData({ nombres: '', paterno: '', materno: '', ci: '', celular: '', numero_afiliado: '', tipo_afiliado: 'Socio Propietario' });
+      fetchAfiliados();
     } catch (error) {
       console.error("Error guardando:", error);
       alert("Hubo un error al guardar: " + error.message);
@@ -93,9 +109,9 @@ const Afiliados = () => {
   };
 
   const filteredAfiliados = afiliados.filter(af => 
-    af.personas?.nombres.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    af.personas?.paterno.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    af.numero_afiliado.includes(searchTerm)
+    (af.nombres?.toLowerCase()?.includes(searchTerm.toLowerCase()) ?? false) || 
+    (af.paterno?.toLowerCase()?.includes(searchTerm.toLowerCase()) ?? false) || 
+    (af.numero_afiliado?.includes(searchTerm) ?? false)
   );
 
   return (
@@ -145,12 +161,12 @@ const Afiliados = () => {
                 <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No hay afiliados registrados.</td></tr>
               ) : (
                 filteredAfiliados.map((afiliado) => (
-                  <tr key={afiliado.id_afiliado} style={{ borderBottom: '1px solid var(--bg-subtle)' }}>
+                  <tr key={afiliado.id_perfil} style={{ borderBottom: '1px solid var(--bg-subtle)' }}>
                     <td style={{ padding: '1rem 0.5rem', fontWeight: '600' }}>{afiliado.numero_afiliado}</td>
                     <td style={{ padding: '1rem 0.5rem' }}>
-                      {afiliado.personas?.nombres} {afiliado.personas?.paterno} {afiliado.personas?.materno}
+                      {afiliado.nombres} {afiliado.paterno} {afiliado.materno}
                     </td>
-                    <td style={{ padding: '1rem 0.5rem' }}>{afiliado.personas?.ci}</td>
+                    <td style={{ padding: '1rem 0.5rem' }}>{afiliado.ci}</td>
                     <td style={{ padding: '1rem 0.5rem' }}>
                       <span style={{ 
                         background: afiliado.tipo_afiliado === 'Socio Propietario' ? 'var(--primary-light)' : '#f1f5f9', 
@@ -178,12 +194,17 @@ const Afiliados = () => {
         </div>
       </div>
 
-      {/* Modal de Registro */}
       {showModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="auth-card animate-fade" style={{ maxWidth: '850px', width: '90%', padding: '2rem 2.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-              <h2 style={{ fontSize: '1.5rem' }}>Registrar Nuevo Afiliado</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <img src="/logo-sindicato.jpg" alt="Logo Sindicato" style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '1.5px solid var(--primary)' }} />
+                <div>
+                  <h2 style={{ fontSize: '1.5rem', margin: 0 }}>Registrar Nuevo Afiliado</h2>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Sindicato 15 de Junio - La Paz</p>
+                </div>
+              </div>
               <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={24} /></button>
             </div>
             
@@ -195,16 +216,6 @@ const Afiliados = () => {
                 <div className="form-group"><label className="form-label">Apellido Materno</label><input type="text" name="materno" className="form-control" value={formData.materno} onChange={handleInputChange} /></div>
                 
                 <div className="form-group"><label className="form-label">Cédula de Identidad</label><input type="text" name="ci" className="form-control" value={formData.ci} onChange={handleInputChange} required /></div>
-                <div className="form-group">
-                  <label className="form-label">Expedido</label>
-                  <select name="expedido" className="form-control" value={formData.expedido} onChange={handleInputChange}>
-                    <option value="LP">La Paz (LP)</option>
-                    <option value="CB">Cochabamba (CB)</option>
-                    <option value="SC">Santa Cruz (SC)</option>
-                    <option value="OR">Oruro (OR)</option>
-                    <option value="PT">Potosí (PT)</option>
-                  </select>
-                </div>
                 <div className="form-group"><label className="form-label">Celular</label><input type="text" name="celular" className="form-control" value={formData.celular} onChange={handleInputChange} /></div>
               </div>
 

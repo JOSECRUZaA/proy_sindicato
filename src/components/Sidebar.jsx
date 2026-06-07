@@ -10,13 +10,10 @@ const Sidebar = () => {
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut(); // Line changed for BUG 2: clean sign out
     } catch (err) {
       console.error("Error durante signOut:", err);
     }
-    localStorage.clear(); // Limpiar tokens residuales de Supabase
-    sessionStorage.clear(); // Limpiar sesión actual
-    window.location.href = '/login'; // Redirección dura para reiniciar todo el estado de React en memoria
   };
 
   const userRol = profile?.rol || '';
@@ -29,9 +26,7 @@ const Sidebar = () => {
   return (
     <aside className="sidebar">
       <div style={{ padding: '0 1.5rem 2rem', display: 'flex', alignItems: 'center', gap: '0.75rem', borderBottom: '1px solid var(--border-light)', marginBottom: '1.5rem' }}>
-        <div style={{ width: '36px', height: '36px', background: 'var(--primary)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
-          <CarFront size={20} />
-        </div>
+        <img src="/logo-sindicato.jpg" alt="Logo Sindicato" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '1.5px solid var(--primary)' }} />
         <div style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--secondary)', fontFamily: 'Outfit' }}>SindiAuto</div>
       </div>
 

@@ -38,23 +38,15 @@ const Login = () => {
     setError(null);
 
     try {
-      // Timeout promise for Supabase login (just in case network drops or hangs)
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Tiempo de espera agotado. Verifique su conexión.')), 15000)
-      );
-
-      const loginPromise = supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: email,
         password: password,
       });
 
-      const { data, error } = await Promise.race([loginPromise, timeoutPromise]);
-
       if (error) throw error;
       
-      // No navegamos aquí manualmente.
-      // El useEffect de arriba detectará que 'user' y 'profile' ya están listos
-      // y hará la redirección limpia hacia la ruta exacta sin parpadeos.
+      // Redirect immediately upon success
+      navigate('/dashboard'); // Line changed for Estructura 3: direct navigation
     } catch (err) {
       console.error('Error de login:', err);
       setError(err.message === 'Invalid login credentials' 
@@ -96,10 +88,8 @@ const Login = () => {
           </button>
           
           <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-            <div style={{ width: '48px', height: '48px', background: 'var(--primary-light)', color: 'var(--primary)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
-              <CarFront size={28} />
-            </div>
-            <h2>Bienvenido de Nuevo</h2>
+            <img src="/logo-sindicato.jpg" alt="Logo Sindicato" style={{ width: '96px', height: '96px', borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--primary)', margin: '0 auto 1rem', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+            <h2>Sindicato 15 de Junio</h2>
             <p style={{ color: 'var(--text-muted)' }}>Ingresa a tu cuenta institucional</p>
           </div>
 

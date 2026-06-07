@@ -43,7 +43,7 @@ async function runVisualTest() {
     args: ['--start-maximized', '--no-sandbox', '--disable-setuid-sandbox']
   });
 
-  const artifactDir = 'C:\\Users\\jcruz\\.gemini\\antigravity-ide\\brain\\b3632aa9-0e7b-4b36-ac2d-62fa8ce8a9cc';
+  const artifactDir = 'C:\\Users\\jcruz\\.gemini\\antigravity-ide\\brain\\4f17a913-0661-4a77-9b90-9e0f773f6246';
   let page = null;
 
   try {

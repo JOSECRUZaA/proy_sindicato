@@ -190,6 +190,10 @@ const ControladorMultas = () => {
   const handleFineSubmit = async (e) => {
     e.preventDefault();
     if (!vehicle || !montoBs) return;
+    if (!profile?.id || profile.id === 0) { // Line changed for BUG 4: Session validation
+      alert("Sesión inválida. Por favor, inicie sesión nuevamente.");
+      return;
+    }
     setSubmittingFine(true);
     try {
       const recipient = multadoA === 'Chofer' && activeDriver ? activeDriver : vehicle.afiliados;
@@ -198,7 +202,7 @@ const ControladorMultas = () => {
 
       const finePayload = {
         id_afiliado: recipient.id_afiliado,
-        id_usuario_emisor: profile.id || 1,
+        id_usuario_emisor: profile.id, // Line changed for BUG 4: removed fallback || 1
         id_tipo_multa: selected ? selected.id_tipo_multa : null,
         concepto: conceptoMulta,
         monto_bs: parseFloat(montoBs),
@@ -364,12 +368,15 @@ const ControladorMultas = () => {
         
         {/* COLUMNA IZQUIERDA: FORMULARIO DE INGRESO */}
         <div className="premium-card">
-          <div className="hero-banner">
-            <div className="hero-banner-content">
-              <h2>Control Sindicato</h2>
-              <p>Punto de Control: En Campo</p>
+          <div className="hero-banner" style={{ background: 'linear-gradient(135deg, var(--secondary) 0%, var(--primary) 100%)', padding: '1.5rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '24px 24px 0 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <img src="/logo-sindicato.jpg" alt="Logo Sindicato" style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', border: '2px solid white', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }} />
+              <div className="hero-banner-content">
+                <h2 style={{ color: 'white', margin: 0, fontSize: '1.5rem', fontWeight: '900', fontFamily: 'Outfit', letterSpacing: '-0.01em' }}>Control Sindicato</h2>
+                <p style={{ color: 'rgba(255, 255, 255, 0.85)', margin: '0.25rem 0 0', fontSize: '0.95rem', fontWeight: '500' }}>Sindicato 15 de Junio - La Paz</p>
+              </div>
             </div>
-            <div className="hero-icon-wrapper">
+            <div className="hero-icon-wrapper" style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(255, 255, 255, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
               <Clock size={24} />
             </div>
           </div>

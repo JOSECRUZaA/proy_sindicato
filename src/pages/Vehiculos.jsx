@@ -8,13 +8,13 @@ const Vehiculos = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [activeDrivers, setActiveDrivers] = useState({}); // Mapeo de id_vehiculo -> chofer_vehiculo activo
+  const [activeDrivers, setActiveDrivers] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
   
   const [formData, setFormData] = useState({
     id_vehiculo: '',
-    id_afiliado: '', // Propietario
-    id_chofer: '',    // Chofer asignado
+    id_propietario: '', 
+    id_chofer: '',
     numero_disco: '',
     placa: '',
     numero_linea: '1',
@@ -31,8 +31,10 @@ const Vehiculos = () => {
   const fetchAfiliadosSelect = async () => {
     try {
       const { data } = await supabase
-        .from('afiliados')
-        .select('id_afiliado, numero_afiliado, tipo_afiliado, personas(nombres, paterno)');
+        .from('perfiles')
+        .select('id_perfil, numero_afiliado, tipo_afiliado, nombres, paterno')
+        .not('numero_afiliado', 'is', null)
+        .order('numero_afiliado', { ascending: true });
       if (data) setListaAfiliados(data);
     } catch (e) {
       console.error("Error al cargar afiliados:", e);
@@ -42,7 +44,7 @@ const Vehiculos = () => {
   const resetForm = () => {
     setFormData({
       id_vehiculo: '',
-      id_afiliado: '',
+      id_propietario: '',
       id_chofer: '',
       numero_disco: '',
       placa: '',
@@ -62,29 +64,26 @@ const Vehiculos = () => {
     try {
       setLoading(true);
       
-      // 1. Obtener vehículos con su propietario
       const { data: vehiculosData, error } = await supabase
         .from('vehiculos')
         .select(`
           id_vehiculo, numero_disco, placa, numero_linea, marca, modelo, estado,
-          afiliados ( numero_afiliado, personas ( nombres, paterno ) )
+          perfiles!vehiculos_id_propietario_fkey ( id_perfil, numero_afiliado, nombres, paterno )
         `);
       
       if (error) throw error;
 
-      // 2. Obtener todas las asignaciones activas de choferes
       const { data: choferesAsignados, error: errChofer } = await supabase
         .from('chofer_vehiculo')
         .select(`
           id_asignacion, id_vehiculo, id_chofer, estado, fecha_fin,
-          afiliados ( numero_afiliado, personas ( nombres, paterno ) )
+          perfiles!chofer_vehiculo_id_chofer_fkey ( numero_afiliado, nombres, paterno )
         `)
         .eq('estado', 1)
         .is('fecha_fin', null);
 
       if (errChofer) throw errChofer;
 
-      // Crear mapa de asignaciones
       const driversMap = {};
       choferesAsignados?.forEach(c => {
         driversMap[c.id_vehiculo] = c;
@@ -105,7 +104,7 @@ const Vehiculos = () => {
       let vehicleId = formData.id_vehiculo;
       
       const vehiclePayload = {
-        id_propietario: formData.id_afiliado,
+        id_propietario: formData.id_propietario,
         numero_disco: parseInt(formData.numero_disco),
         placa: formData.placa,
         numero_linea: formData.numero_linea,
@@ -132,19 +131,15 @@ const Vehiculos = () => {
         }
       }
 
-      // Manejar la asignación de chofer en chofer_vehiculo
       const activeAssign = activeDrivers[vehicleId];
       if (formData.id_chofer) {
-        // Si no hay asignación o cambió de chofer
         if (!activeAssign || activeAssign.id_chofer.toString() !== formData.id_chofer.toString()) {
-          // Desactivar asignación previa
           if (activeAssign) {
             await supabase
               .from('chofer_vehiculo')
               .update({ estado: 0, fecha_fin: new Date().toISOString().split('T')[0] })
               .eq('id_asignacion', activeAssign.id_asignacion);
           }
-          // Registrar nueva asignación activa
           const { error: insertErr } = await supabase
             .from('chofer_vehiculo')
             .insert([{
@@ -155,7 +150,6 @@ const Vehiculos = () => {
           if (insertErr) throw insertErr;
         }
       } else {
-        // Si se limpia el chofer, desactivar asignación anterior si existía
         if (activeAssign) {
           await supabase
             .from('chofer_vehiculo')
@@ -177,7 +171,7 @@ const Vehiculos = () => {
     const activeDriver = activeDrivers[v.id_vehiculo];
     setFormData({
       id_vehiculo: v.id_vehiculo,
-      id_afiliado: v.afiliados?.id_afiliado || '',
+      id_propietario: v.perfiles?.id_perfil || '',
       id_chofer: activeDriver ? activeDriver.id_chofer : '',
       numero_disco: v.numero_disco,
       placa: v.placa,
@@ -193,13 +187,11 @@ const Vehiculos = () => {
   const handleDeleteClick = async (idVehiculo) => {
     if (!window.confirm("¿Está seguro de eliminar este vehículo del parque automotor? Se desactivarán las relaciones de choferes vinculadas.")) return;
     try {
-      // 1. Desactivar asignaciones en chofer_vehiculo
       await supabase
         .from('chofer_vehiculo')
         .delete()
         .eq('id_vehiculo', idVehiculo);
 
-      // 2. Eliminar vehículo
       const { error } = await supabase
         .from('vehiculos')
         .delete()
@@ -213,12 +205,11 @@ const Vehiculos = () => {
     }
   };
 
-  // Filtrar vehículos por término de búsqueda
   const filteredVehiculos = vehiculos.filter(v => 
     v.placa.toLowerCase().includes(searchTerm.toLowerCase()) ||
     v.numero_disco.toString().includes(searchTerm) ||
-    (v.afiliados?.personas?.nombres && v.afiliados.personas.nombres.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (v.afiliados?.personas?.paterno && v.afiliados.personas.paterno.toLowerCase().includes(searchTerm.toLowerCase()))
+    (v.perfiles?.nombres && v.perfiles.nombres.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (v.perfiles?.paterno && v.perfiles.paterno.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const getStatusBadgeClass = (estado) => {
@@ -226,8 +217,8 @@ const Vehiculos = () => {
       case 'Operativo': return 'badge-success';
       case 'Restricción Vehicular': return 'badge-warning';
       case 'Restricción Sindical': return 'badge-danger';
-      case 'Mantenimiento': return 'badge-warning'; // Yellow badge
-      case 'Fuerza Mayor': return 'badge-success';  // Emerald badge
+      case 'Mantenimiento': return 'badge-warning';
+      case 'Fuerza Mayor': return 'badge-success';
       case 'Baja': return 'badge-danger';
       default: return 'badge-secondary';
     }
@@ -289,12 +280,12 @@ const Vehiculos = () => {
                         <td style={{ fontWeight: '600', letterSpacing: '0.05em' }}>{v.placa}</td>
                         <td><span className="badge badge-warning" style={{ background: 'var(--primary-light)', color: 'var(--primary)' }}>Línea {v.numero_linea}</span></td>
                         <td>{v.marca} {v.modelo}</td>
-                        <td>{v.afiliados?.personas?.nombres} {v.afiliados?.personas?.paterno}</td>
+                        <td>{v.perfiles?.nombres} {v.perfiles?.paterno}</td>
                         <td>
                           {activeDriver ? (
                             <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--text-main)', fontSize: '0.9rem' }}>
                               <User size={14} color="var(--primary)" />
-                              {activeDriver.afiliados?.personas?.nombres} {activeDriver.afiliados?.personas?.paterno}
+                              {activeDriver.perfiles?.nombres} {activeDriver.perfiles?.paterno}
                             </span>
                           ) : (
                             <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.85rem' }}>Propietario opera</span>
@@ -336,8 +327,14 @@ const Vehiculos = () => {
       {showModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="auth-card animate-fade" style={{ maxWidth: '800px', width: '90%', padding: '2rem 2.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 style={{ fontSize: '1.5rem' }}>{isEditing ? 'Editar Vehículo' : 'Registrar Nuevo Vehículo'}</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-light)', paddingBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <img src="/logo-sindicato.jpg" alt="Logo Sindicato" style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', border: '1.5px solid var(--primary)' }} />
+                <div>
+                  <h2 style={{ fontSize: '1.5rem', margin: 0 }}>{isEditing ? 'Editar Vehículo' : 'Registrar Nuevo Vehículo'}</h2>
+                  <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>Sindicato 15 de Junio - La Paz</p>
+                </div>
+              </div>
               <button onClick={() => { setShowModal(false); resetForm(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={24} /></button>
             </div>
             
@@ -345,11 +342,11 @@ const Vehiculos = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', marginBottom: '1.5rem' }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label className="form-label">Socio Propietario</label>
-                  <select name="id_afiliado" className="form-control" value={formData.id_afiliado} onChange={handleInputChange} required>
+                  <select name="id_propietario" className="form-control" value={formData.id_propietario} onChange={handleInputChange} required>
                     <option value="">Seleccione un socio...</option>
                     {listaAfiliados.filter(af => af.tipo_afiliado === 'Socio Propietario').map(af => (
-                      <option key={af.id_afiliado} value={af.id_afiliado}>
-                        {af.numero_afiliado} - {af.personas?.nombres} {af.personas?.paterno}
+                      <option key={af.id_perfil} value={af.id_perfil}>
+                        {af.numero_afiliado} - {af.nombres} {af.paterno}
                       </option>
                     ))}
                   </select>
@@ -360,8 +357,8 @@ const Vehiculos = () => {
                   <select name="id_chofer" className="form-control" value={formData.id_chofer} onChange={handleInputChange}>
                     <option value="">Ninguno (Opera el Propietario)</option>
                     {listaAfiliados.map(af => (
-                      <option key={af.id_afiliado} value={af.id_afiliado}>
-                        [{af.tipo_afiliado}] {af.numero_afiliado} - {af.personas?.nombres} {af.personas?.paterno}
+                      <option key={af.id_perfil} value={af.id_perfil}>
+                        [{af.tipo_afiliado}] {af.numero_afiliado} - {af.nombres} {af.paterno}
                       </option>
                     ))}
                   </select>
